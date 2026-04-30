@@ -5,7 +5,11 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sync"
 )
+
+
+var mu sync.Mutex
 
 var backends = []string{
 	"http://localhost:9001",
@@ -16,11 +20,13 @@ var backends = []string{
 var current = 0
 
 func getNextBackend() string {
+	mu.Lock()
+	defer mu.Unlock()
+
 	url := backends[current]
 	current = (current + 1) % len(backends)
 	return url
 }
-
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		targetURL, _ := url.Parse(getNextBackend())
