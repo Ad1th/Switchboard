@@ -1,12 +1,8 @@
 # Switchboard
 
----
-
 Switchboard
 
 A small reverse proxy + load balancer I built in Go to understand how this stuff actually works (instead of just using NGINX blindly).
-
-⸻
 
 what it does
 
@@ -20,8 +16,6 @@ basically:
 client → switchboard → backend(s)
 
 nothing fancy, just the core idea working.
-
-⸻
 
 how to run
 
@@ -53,21 +47,15 @@ run this on:
 - 9002
 - 9003
 
-⸻
-
 2. start switchboard
 
 go run main.go
-
-⸻
 
 3. test it
 
 curl localhost:8080
 
 hit it multiple times — you should see responses switch between servers.
-
-⸻
 
 health checks
 
@@ -82,8 +70,6 @@ if a backend:
 
 it gets marked as dead and skipped automatically.
 
-⸻
-
 why i made this
 
 mostly to understand:
@@ -94,15 +80,11 @@ mostly to understand:
 
 also just wanted to build something a bit closer to “real infra” instead of another CRUD app.
 
-⸻
-
 tech
 
 - Go (net/http, httputil)
 - goroutines
 - mutex for safe routing
-
-⸻
 
 things i might add later
 
@@ -110,8 +92,6 @@ things i might add later
 - retry logic if a backend fails
 - config file instead of hardcoding servers
 - CLI (switchboard start etc.)
-
-⸻
 
 quick run
 
@@ -129,8 +109,4 @@ go run main.go
 
 curl localhost:8080
 
-⸻
-
 that’s it — simple, but it works
-
-⸻
