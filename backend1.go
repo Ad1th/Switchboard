@@ -12,6 +12,11 @@ func main() {
 		fmt.Fprintf(w, "Hello from backend %s\n", port)
 	})
 
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(200)
+	fmt.Fprintln(w, "OK")
+})
+
 	fmt.Println("Backend running on port", port)
 	http.ListenAndServe(":"+port, nil)
 }
