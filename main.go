@@ -7,16 +7,30 @@ import (
 	"net/url"
 )
 
+var backends = []string{
+	"http://localhost:9001",
+	"http://localhost:9002",
+	"http://localhost:9003",
+}
+
+var current = 0
+
+func getNextBackend() string {
+	url := backends[current]
+	current = (current + 1) % len(backends)
+	return url
+}
+
 func main() {
-	target, _ := url.Parse("http://localhost:9001")
-
-	proxy := httputil.NewSingleHostReverseProxy(target)
-
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("Routing request to backend...")
+		targetURL, _ := url.Parse(getNextBackend())
+
+		fmt.Println("Routing to:", targetURL)
+
+		proxy := httputil.NewSingleHostReverseProxy(targetURL)
 		proxy.ServeHTTP(w, r)
 	})
 
-	fmt.Println("Switchboard running on port 8080")
+	fmt.Println("⚡ Switchboard running on port 8080")
 	http.ListenAndServe(":8080", nil)
 }
