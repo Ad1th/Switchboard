@@ -1,112 +1,44 @@
 # Switchboard
 
-Switchboard
-
-A small reverse proxy + load balancer I built in Go to understand how this stuff actually works (instead of just using NGINX blindly).
-
-what it does
-
-- listens on localhost:8080
-- forwards requests to multiple backend servers
-- rotates between them (round robin)
-- skips a backend if it goes down
-
-basically:
+A small reverse proxy and load balancer in Go, built to understand how this stuff works instead of using NGINX blindly.
 
 client → switchboard → backend(s)
 
-nothing fancy, just the core idea working.
+## Features
 
-how to run
+- round robin or least-connections balancing
+- active health checks (parallel, 2s timeout) plus passive detection: a backend that fails mid-request is marked dead immediately
+- automatic retry on the next backend for idempotent requests (GET/HEAD/OPTIONS)
+- `X-Forwarded-*` headers, `Host` rewritten to the backend
+- JSON config file or flags
+- status dashboard at `/_switchboard/` and JSON at `/_switchboard/status.json`
+- graceful shutdown
 
-1. start a few backend servers
+## Run
 
-you’ll need 2–3 simple servers running on different ports.
+```sh
+go run ./cmd/backend -port 9001 &
+go run ./cmd/backend -port 9002 &
+go run ./cmd/backend -port 9003 &
 
-example:
+go run ./cmd/switchboard            # defaults: :8080, the three backends above
+curl localhost:8080                 # hit it repeatedly
+open http://localhost:8080/_switchboard/
+```
 
-package main
-import (
-"fmt"
-"net/http"
-)
-func main() {
-port := "9001"
-http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-fmt.Fprintf(w, "hello from %s\n", port)
-})
-http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-w.WriteHeader(200)
-})
-http.ListenAndServe(":"+port, nil)
-}
+Kill a backend and keep curling: no request fails, and the dashboard shows it DOWN.
 
-run this on:
+## Config
 
-- 9001
-- 9002
-- 9003
+```sh
+go run ./cmd/switchboard -config switchboard.example.json
+go run ./cmd/switchboard -strategy leastconn -backends http://a:9001,http://b:9001
+```
 
-2. start switchboard
+Flags override the file. See `switchboard.example.json`.
 
-go run main.go
+## Test
 
-3. test it
-
-curl localhost:8080
-
-hit it multiple times — you should see responses switch between servers.
-
-health checks
-
-switchboard periodically calls:
-
-/health
-
-if a backend:
-
-- stops responding
-- or returns non-200
-
-it gets marked as dead and skipped automatically.
-
-why i made this
-
-mostly to understand:
-
-- how reverse proxies actually forward requests
-- how load balancing works under the hood
-- how to handle shared state safely (mutex, etc.)
-
-also just wanted to build something a bit closer to “real infra” instead of another CRUD app.
-
-tech
-
-- Go (net/http, httputil)
-- goroutines
-- mutex for safe routing
-
-things i might add later
-
-- better balancing (least connections)
-- retry logic if a backend fails
-- config file instead of hardcoding servers
-- CLI (switchboard start etc.)
-
-quick run
-
-# start backends
-
-go run backend1.go
-go run backend2.go
-go run backend3.go
-
-# start proxy
-
-go run main.go
-
-# test
-
-curl localhost:8080
-
-that’s it — simple, but it works
+```sh
+go test -race ./...
+```

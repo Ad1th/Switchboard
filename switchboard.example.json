@@ -1,0 +1,10 @@
+{
+  "addr": ":8080",
+  "strategy": "leastconn",
+  "health_interval": "3s",
+  "backends": [
+    "http://localhost:9001",
+    "http://localhost:9002",
+    "http://localhost:9003"
+  ]
+}
