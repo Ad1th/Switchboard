@@ -1,9 +1,15 @@
 {
   "addr": ":8080",
-  "strategy": "leastconn",
+  "strategy": "p2c",
   "health_interval": "3s",
+  "breaker_threshold": 3,
+  "breaker_cooldown": "5s",
+  "rate_limit": 0,
+  "rate_burst": 0,
+  "trust_forwarded": false,
+  "admin_token": "",
   "backends": [
-    "http://localhost:9001",
+    { "url": "http://localhost:9001", "weight": 2 },
     "http://localhost:9002",
     "http://localhost:9003"
   ]
