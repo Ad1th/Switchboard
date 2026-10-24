@@ -129,7 +129,7 @@ func (s *Server) Handler() http.Handler {
 		n := s.served.Add(1)
 		w.Header().Set("X-Backend-Name", s.Name)
 		if strings.Contains(r.Header.Get("Accept"), "text/html") {
-			s.page(w, r, n)
+			s.shop(w, r, n)
 			return
 		}
 		fmt.Fprintf(w, "Hello from %s (port %s, pid %d)\n", s.Name, s.port(), os.Getpid())
@@ -198,7 +198,7 @@ footer { margin: 0 32px 32px; color: #666; font-size: 14px; }
 <tr><th>Received via (X-Forwarded-Host)</th><td>{{.Via}}</td></tr>
 <tr><th>Time</th><td>{{.Time}}</td></tr>
 </table>
-<footer>Reload the page to send another request through the load balancer.</footer>
+<footer><a href="/">Back to the shop</a>. Reload this page to send another request through the load balancer.</footer>
 </body></html>`))
 
 func (s *Server) page(w http.ResponseWriter, r *http.Request, served int64) {

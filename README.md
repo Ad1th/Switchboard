@@ -21,7 +21,7 @@ Then the balancer:
 go run ./cmd/switchboard -loadgen -backends http://localhost:9001,http://localhost:9002,http://localhost:9003,http://localhost:9004
 ```
 
-- http://localhost:8080/ goes through the balancer. Each backend serves its own page (name, colour, port, process ID, requests served), so reloading shows the balancer moving between backends.
+- http://localhost:8080/ goes through the balancer to a small shop, Corner Store, that every backend serves. A strip at the top of each page says which backend served it, so clicking around shows the balancer moving between backends. The cart is kept in a cookie, so it stays the same whichever backend answers. `/backend` shows details of the server that answered.
 - http://localhost:8080/_switchboard/ is the status page.
 
 For a one-command version, `go run ./cmd/switchboard -demo 4` runs four backends inside the process instead.
