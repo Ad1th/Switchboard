@@ -13,16 +13,20 @@ import (
 
 func main() {
 	port := flag.String("port", "9001", "port to listen on")
+	name := flag.String("name", "", "name shown on its page and in Switchboard (default backend-PORT)")
 	latency := flag.Int("latency", 0, "added latency in milliseconds")
 	jitter := flag.Int("jitter", 0, "random extra latency in milliseconds")
 	errorRate := flag.Float64("error-rate", 0, "fraction of requests answered with 500")
 	flag.Parse()
 
-	s, err := demo.Start("backend "+*port, ":"+*port, demo.Chaos{LatencyMs: *latency, JitterMs: *jitter, ErrorRate: *errorRate})
+	if *name == "" {
+		*name = "backend-" + *port
+	}
+	s, err := demo.Start(*name, ":"+*port, demo.Chaos{LatencyMs: *latency, JitterMs: *jitter, ErrorRate: *errorRate})
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("Backend running on port", *port)
+	log.Printf("%s running on port %s", *name, *port)
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	<-sig

@@ -9,6 +9,7 @@ import (
 
 type BackendStatus struct {
 	ID       string       `json:"id"`
+	Name     string       `json:"name"`
 	URL      string       `json:"url"`
 	Weight   int64        `json:"weight"`
 	Healthy  bool         `json:"healthy"`
@@ -43,6 +44,7 @@ func (b *Backend) Status(now time.Time) BackendStatus {
 	ps := b.lat.percentiles(0.5, 0.95, 0.99)
 	return BackendStatus{
 		ID:       b.ID,
+		Name:     b.Name(),
 		URL:      b.URL.String(),
 		Weight:   b.Weight(),
 		Healthy:  b.healthy.Load(),

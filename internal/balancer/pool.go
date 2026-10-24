@@ -34,6 +34,7 @@ type Options struct {
 
 type BackendConfig struct {
 	URL    string
+	Name   string
 	Weight int64
 }
 
@@ -138,6 +139,10 @@ func (p *Pool) add(bc BackendConfig, check bool) (*Backend, error) {
 	p.nextID++
 	b := &Backend{ID: strconv.Itoa(p.nextID), URL: u}
 	b.weight.Store(bc.Weight)
+	if bc.Name != "" {
+		b.name.Store(&bc.Name)
+		b.nameSet = true
+	}
 	b.breaker.init(p.opts.BreakerThreshold, p.opts.BreakerCooldown)
 	b.proxy = &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
@@ -339,6 +344,9 @@ func (p *Pool) check(b *Backend) {
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 		ok = resp.StatusCode == http.StatusOK
+		if n := resp.Header.Get("X-Backend-Name"); n != "" && !b.nameSet && len(n) <= 64 {
+			b.name.Store(&n)
+		}
 	}
 	if was := b.healthy.Swap(ok); was != ok {
 		p.logf("backend %s is now %s", b.URL, map[bool]string{true: "UP", false: "DOWN"}[ok])
