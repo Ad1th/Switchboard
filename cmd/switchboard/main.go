@@ -32,11 +32,10 @@ type config struct {
 	RateLimit        float64   `json:"rate_limit"`
 	RateBurst        float64   `json:"rate_burst"`
 	TrustForwarded   bool      `json:"trust_forwarded"`
-	AdminToken       string    `json:"admin_token"`
 	Backends         []backend `json:"backends"`
 }
 
-// backend accepts either "http://host:port" or {"url": ..., "weight": n}.
+// backend accepts either "http://host:port" or {"url": ..., "name": ..., "weight": n}.
 type backend balancer.BackendConfig
 
 func (b *backend) UnmarshalJSON(data []byte) error {
@@ -47,16 +46,23 @@ func (b *backend) UnmarshalJSON(data []byte) error {
 	}
 	var obj struct {
 		URL    string `json:"url"`
+		Name   string `json:"name"`
 		Weight int64  `json:"weight"`
 	}
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return err
 	}
-	*b = backend{URL: obj.URL, Weight: obj.Weight}
+	*b = backend{URL: obj.URL, Name: obj.Name, Weight: obj.Weight}
 	return nil
 }
 
-func loadConfig() (config, int, error) {
+type options struct {
+	demo    int
+	loadgen bool
+}
+
+func loadConfig() (config, options, error) {
+	var opts options
 	cfg := config{
 		Addr:            ":8080",
 		Strategy:        "roundrobin",
@@ -68,20 +74,20 @@ func loadConfig() (config, int, error) {
 	path := flag.String("config", "", "path to a JSON config file")
 	addr := flag.String("addr", "", "listen address (default :8080)")
 	strategy := flag.String("strategy", "", strings.Join(balancer.StrategyNames(), ", "))
-	backends := flag.String("backends", "", "comma-separated backend URLs")
+	backends := flag.String("backends", "", "comma-separated backend URLs, optionally named: api-1=http://localhost:9001")
 	rate := flag.Float64("rate-limit", -1, "requests per second per client, 0 for none")
-	token := flag.String("admin-token", "", "require this token to change settings from the control panel")
-	demoLines := flag.Int("demo", 0, "start this many built-in demo backends and the traffic generator")
+	flag.IntVar(&opts.demo, "demo", 0, "start this many built-in demo backends and the traffic generator")
+	flag.BoolVar(&opts.loadgen, "loadgen", false, "enable the traffic generator in the control panel")
 	flag.Parse()
 
 	if *path != "" {
 		data, err := os.ReadFile(*path)
 		if err != nil {
-			return cfg, 0, err
+			return cfg, opts, err
 		}
 		cfg.Backends = nil // the file replaces the defaults, not extends them
 		if err := json.Unmarshal(data, &cfg); err != nil {
-			return cfg, 0, fmt.Errorf("%s: %w", *path, err)
+			return cfg, opts, fmt.Errorf("%s: %w", *path, err)
 		}
 	}
 	if *addr != "" {
@@ -92,24 +98,30 @@ func loadConfig() (config, int, error) {
 	}
 	if *backends != "" {
 		cfg.Backends = nil
-		for _, u := range strings.Split(*backends, ",") {
-			cfg.Backends = append(cfg.Backends, backend{URL: u})
+		for _, item := range strings.Split(*backends, ",") {
+			name, u, named := strings.Cut(item, "=")
+			if !named {
+				name, u = "", item
+			}
+			cfg.Backends = append(cfg.Backends, backend{URL: u, Name: name})
 		}
 	}
 	if *rate >= 0 {
 		cfg.RateLimit = *rate
 	}
-	if *token != "" {
-		cfg.AdminToken = *token
+	if opts.demo > 0 {
+		opts.loadgen = true
 	}
-	if env := os.Getenv("SWITCHBOARD_ADMIN_TOKEN"); env != "" && cfg.AdminToken == "" {
-		cfg.AdminToken = env
+	if opts.loadgen {
+		// The traffic generator pretends to be many clients through
+		// X-Forwarded-For, so trust it.
+		cfg.TrustForwarded = true
 	}
-	return cfg, *demoLines, nil
+	return cfg, opts, nil
 }
 
 func main() {
-	cfg, demoLines, err := loadConfig()
+	cfg, opts, err := loadConfig()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -125,15 +137,13 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	ui := &web.Server{AdminToken: cfg.AdminToken}
-	if demoLines > 0 {
-		// Demo mode: backends run in this process and the traffic generator
-		// pretends to be many callers, so trust its X-Forwarded-For.
+	ui := &web.Server{}
+	if opts.demo > 0 {
+		// Demo mode: the backends run inside this process.
 		ui.Fleet = web.NewFleet()
 		defer ui.Fleet.Close()
 		cfg.Backends = nil
-		cfg.TrustForwarded = true
-		for i := range demoLines {
+		for i := range opts.demo {
 			d, err := ui.Fleet.Spawn(demo.Chaos{LatencyMs: 15 + 10*i, JitterMs: 40})
 			if err != nil {
 				log.Fatal(err)
@@ -174,7 +184,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if demoLines > 0 {
+	if opts.loadgen {
 		_, port, _ := net.SplitHostPort(ln.Addr().String())
 		ui.Loadgen = loadgen.New("http://127.0.0.1:" + port)
 		go ui.Loadgen.Run(ctx)

@@ -15,6 +15,9 @@ type Backend struct {
 	ID  string
 	URL *url.URL
 
+	name    atomic.Pointer[string] // from config, or reported by the backend
+	nameSet bool                   // name came from config and is not overwritten
+
 	proxy    *httputil.ReverseProxy
 	weight   atomic.Int64
 	healthy  atomic.Bool
@@ -32,6 +35,15 @@ type Backend struct {
 }
 
 func (b *Backend) Weight() int64 { return b.weight.Load() }
+
+// Name is the backend's display name: the configured one, else the one the
+// backend reports in X-Backend-Name on /health, else its host:port.
+func (b *Backend) Name() string {
+	if n := b.name.Load(); n != nil {
+		return *n
+	}
+	return b.URL.Host
+}
 
 // Available reports whether the backend may receive new requests.
 func (b *Backend) Available(now time.Time) bool {

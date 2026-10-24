@@ -4,145 +4,87 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Switchboard</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23C9A453'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%231C1714'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Big+Shoulders+Text:wght@500;600;700&family=Courier+Prime:wght@400;700&display=swap">
 <link rel="stylesheet" href="assets/app.css">
 </head>
 <body>
-<main class="cabinet" id="cabinet">
-  <header class="crown">
-    <div class="plaque">
-      <h1>Switchboard</h1>
-      <p id="exchange" class="exchange" aria-live="polite">Connecting to the exchange</p>
-    </div>
-    <div class="meters">
-      <figure class="meter" id="meter-rps"><figcaption>Calls per second</figcaption></figure>
-      <figure class="meter" id="meter-p95"><figcaption>Answer time, p95 ms</figcaption></figure>
-      <figure class="meter" id="meter-err"><figcaption>Failed calls, %</figcaption></figure>
-    </div>
-  </header>
+<header>
+  <h1>Switchboard</h1>
+  <span id="meta">connecting…</span>
+</header>
 
-  <section class="jackfield" aria-label="Backend lines">
-    <ol class="lines" id="lines"></ol>
-  </section>
-
-  <section class="shelf" aria-label="Operator controls">
-    <div class="callers" id="callers" aria-hidden="true"></div>
-    <div class="controls">
-      <fieldset class="rotary" id="rotary">
-        <legend>Routing</legend>
-        <div class="dial">
-          <div class="knob" id="knob"><span class="pointer"></span></div>
-        </div>
-        <p class="rotary-note" id="strategy-note"></p>
-      </fieldset>
-
-      <div class="lever-wrap" id="lever-wrap">
-        <label for="traffic">Traffic</label>
-        <input type="range" id="traffic" class="lever" min="0" max="500" step="5" value="0">
-        <output for="traffic" id="traffic-out">Idle</output>
-      </div>
-
-      <div class="limiter">
-        <label for="limit">Limit per caller</label>
-        <input type="range" id="limit" min="0" max="40" step="1" value="0">
-        <output for="limit" id="limit-out">Off</output>
-        <button type="button" class="brass-btn" id="install">Install line</button>
-      </div>
-    </div>
-  </section>
-
-  <section class="instruments">
-    <figure class="recorder">
-      <canvas id="chart" aria-label="Answer time and call rate over the last two minutes" role="img"></canvas>
-      <figcaption class="pens">
-        <span class="pen p50">p50 answer time</span>
-        <span class="pen p95">p95 answer time</span>
-        <span class="pen rps">calls per second</span>
-      </figcaption>
-    </figure>
-    <figure class="tape">
-      <figcaption>Call log</figcaption>
-      <ol id="tape" aria-live="off"></ol>
-    </figure>
-  </section>
-
-  <canvas id="cords" class="cords" aria-hidden="true"></canvas>
-</main>
-
-<dialog id="linecard" class="card-dialog" aria-labelledby="lc-title">
-  <form method="dialog" class="index-card">
-    <header>
-      <h2 id="lc-title">Line</h2>
-      <button value="close" class="close" aria-label="Close">×</button>
-    </header>
-    <p class="lc-url" id="lc-url"></p>
-    <dl class="lc-stats" id="lc-stats"></dl>
-
-    <div class="lc-row">
-      <span>Weight</span>
-      <div class="stepper">
-        <button type="button" id="lc-wdown" aria-label="Lower weight">−</button>
-        <output id="lc-weight">1</output>
-        <button type="button" id="lc-wup" aria-label="Raise weight">+</button>
-      </div>
-    </div>
-    <label class="lc-row toggle">
-      <span>Drain line<small>Finish calls in progress, take no new ones</small></span>
-      <input type="checkbox" id="lc-drain" role="switch">
-    </label>
-
-    <fieldset class="faults" id="lc-faults">
-      <legend>Faults</legend>
-      <label class="lc-row toggle">
-        <span>Pull the plug<small>Fail health checks and drop connections</small></span>
-        <input type="checkbox" id="lc-down" role="switch">
-      </label>
-      <label class="slider">Added latency <output id="lc-lat-out"></output>
-        <input type="range" id="lc-lat" min="0" max="1500" step="10"></label>
-      <label class="slider">Jitter <output id="lc-jit-out"></output>
-        <input type="range" id="lc-jit" min="0" max="800" step="10"></label>
-      <label class="slider">Error rate <output id="lc-err-out"></output>
-        <input type="range" id="lc-err" min="0" max="100" step="1"></label>
-    </fieldset>
-    <p class="lc-nofaults" id="lc-nofaults" hidden>This backend does not run the demo server, so faults cannot be injected.</p>
-
-    <button type="button" class="remove" id="lc-remove">Remove line</button>
+<section class="bar">
+  <label>Strategy
+    <select id="strategy"></select>
+  </label>
+  <form id="traffic-form" class="inline">
+    <label>Generated traffic <input type="number" id="traffic" min="0" max="500" step="10"> req/s</label>
+    <button>Set</button>
   </form>
-</dialog>
-
-<dialog id="installer" class="card-dialog" aria-labelledby="in-title">
-  <form class="index-card" id="install-form">
-    <header>
-      <h2 id="in-title">Install line</h2>
-      <button type="button" class="close" id="in-close" aria-label="Close">×</button>
-    </header>
-    <label class="field">Backend URL
-      <input type="url" id="in-url" placeholder="http://localhost:9004" required></label>
-    <label class="field">Weight
-      <input type="number" id="in-weight" min="1" max="100" value="1"></label>
-    <div class="actions">
-      <button type="submit" class="brass-btn">Install</button>
-      <button type="button" class="brass-btn ghost" id="in-demo">Install demo line</button>
-    </div>
+  <form id="limit-form" class="inline">
+    <label>Rate limit <input type="number" id="limit" min="0" max="10000" step="1"> req/s per client</label>
+    <button>Set</button>
+    <span class="hint">0 = off</span>
   </form>
-</dialog>
+</section>
 
-<dialog id="tokenbox" class="card-dialog" aria-labelledby="tk-title">
-  <form class="index-card" id="token-form">
-    <header><h2 id="tk-title">Operator token</h2></header>
-    <p>This exchange is locked. Enter the admin token to change settings. You can still watch without it.</p>
-    <label class="field">Token <input type="password" id="tk-input" autocomplete="off" required></label>
-    <div class="actions">
-      <button type="submit" class="brass-btn">Unlock</button>
-      <button type="button" class="brass-btn ghost" id="tk-cancel">Just watch</button>
-    </div>
-  </form>
-</dialog>
+<section class="bar">
+  <button id="probe">Send a request to /</button>
+  <span id="probe-out" class="hint">The balancer picks a backend for each request.</span>
+  <a href="/" target="_blank" rel="noopener">Open / in a new tab</a>
+</section>
 
-<p class="slip" id="slip" role="status" aria-live="polite"></p>
+<table class="summary">
+  <tr><th>Req/s</th><th>Total</th><th>5xx</th><th>429</th><th>Retries</th><th>p50</th><th>p95</th><th>Uptime</th></tr>
+  <tr id="summary"><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+</table>
+
+<h2>Backends</h2>
+<div class="scroll">
+<table class="backends">
+  <thead>
+    <tr>
+      <th>Name</th><th>Address</th><th>Status</th><th>Weight</th>
+      <th class="num">Active</th><th class="num">Served</th><th class="num">Failed</th><th class="num">Err %</th>
+      <th class="num">p50</th><th class="num">p95</th><th class="num">p99</th>
+      <th>Share, last 10 s</th><th></th>
+    </tr>
+  </thead>
+  <tbody id="backends"></tbody>
+</table>
+</div>
+<form id="add-form" class="bar">
+  <label>Add backend <input type="url" id="add-url" placeholder="http://localhost:9006" required></label>
+  <label>Name <input type="text" id="add-name" placeholder="optional" size="10"></label>
+  <button>Add</button>
+  <button type="button" id="add-demo" hidden>Add demo backend</button>
+</form>
+
+<div class="charts">
+  <figure>
+    <figcaption>Requests per second by backend, last 60 s</figcaption>
+    <svg id="chart-rps" viewBox="0 0 600 180" preserveAspectRatio="none"></svg>
+    <div class="legend" id="legend"></div>
+  </figure>
+  <figure>
+    <figcaption>Latency of answered requests, last 60 s (ms)</figcaption>
+    <svg id="chart-lat" viewBox="0 0 600 180" preserveAspectRatio="none"></svg>
+    <div class="legend"><span><i style="background:var(--p50)"></i>p50</span><span><i style="background:var(--p95)"></i>p95</span><span id="lat-scale"></span></div>
+  </figure>
+</div>
+
+<h2>Recent requests <span class="hint">(sampled; every error is kept)</span></h2>
+<div class="scroll">
+<table class="log">
+  <thead><tr><th>Time</th><th>Client</th><th>Request</th><th>Backend</th><th class="num">Status</th><th class="num">ms</th><th class="num">Tries</th></tr></thead>
+  <tbody id="log"></tbody>
+</table>
+</div>
+
+<footer>
+  <a href="status.json">status.json</a>
+  <a href="metrics">metrics</a>
+  <span id="error" role="status"></span>
+</footer>
 
 <script type="module" src="assets/app.js"></script>
 </body>

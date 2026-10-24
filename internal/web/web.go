@@ -4,7 +4,6 @@ package web
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -24,26 +23,29 @@ import (
 var static embed.FS
 
 type Server struct {
-	Pool       *balancer.Pool
-	Loadgen    *loadgen.Generator // nil disables the traffic control
-	Fleet      *Fleet             // nil disables installing demo lines
-	AdminToken string             // empty leaves the admin API open
+	Pool    *balancer.Pool
+	Loadgen *loadgen.Generator // nil disables the traffic control
+	Fleet   *Fleet             // nil disables installing demo lines
 }
 
 // Fleet owns the demo backends that run inside the Switchboard process.
 type Fleet struct {
 	mu      sync.Mutex
 	servers map[string]*demo.Server // keyed by URL
+	spawned int
 }
 
 func NewFleet() *Fleet { return &Fleet{servers: map[string]*demo.Server{}} }
 
 func (f *Fleet) Spawn(chaos demo.Chaos) (*demo.Server, error) {
-	s, err := demo.Start("", "127.0.0.1:0", chaos)
+	f.mu.Lock()
+	f.spawned++
+	name := fmt.Sprintf("api-%d", f.spawned)
+	f.mu.Unlock()
+	s, err := demo.Start(name, "127.0.0.1:0", chaos)
 	if err != nil {
 		return nil, err
 	}
-	s.Name = "backend " + s.URL[len("http://127.0.0.1"):]
 	f.mu.Lock()
 	f.servers[s.URL] = s
 	f.mu.Unlock()
@@ -84,7 +86,6 @@ type state struct {
 	LoadgenMax int64          `json:"loadgen_max"`
 	HasLoadgen bool           `json:"has_loadgen"`
 	CanInstall bool           `json:"can_install"`
-	Locked     bool           `json:"locked"`
 }
 
 type backendState struct {
@@ -98,7 +99,6 @@ func (s *Server) state() state {
 		HasLoadgen: s.Loadgen != nil,
 		LoadgenMax: loadgen.MaxRPS,
 		CanInstall: s.Fleet != nil,
-		Locked:     s.AdminToken != "",
 	}
 	if s.Loadgen != nil {
 		st.LoadgenRPS = s.Loadgen.RPS()
@@ -123,18 +123,6 @@ func decode(r *http.Request, v any) error {
 	return json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(v)
 }
 
-// admin wraps a mutating handler with the token check.
-func (s *Server) admin(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if s.AdminToken != "" &&
-			subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Admin-Token")), []byte(s.AdminToken)) != 1 {
-			fail(w, http.StatusUnauthorized, errors.New("admin token required"))
-			return
-		}
-		h(w, r)
-	}
-}
-
 func (s *Server) Register(mux *http.ServeMux) {
 	assets, _ := fs.Sub(static, "static")
 	mux.HandleFunc("GET /_switchboard/{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -155,7 +143,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /_switchboard/api/events", s.events)
 
-	mux.HandleFunc("PUT /_switchboard/api/strategy", s.admin(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /_switchboard/api/strategy", func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Name string }
 		if err := decode(r, &body); err != nil {
 			fail(w, 400, err)
@@ -166,11 +154,12 @@ func (s *Server) Register(mux *http.ServeMux) {
 			return
 		}
 		writeJSON(w, 200, s.state())
-	}))
+	})
 
-	mux.HandleFunc("POST /_switchboard/api/backends", s.admin(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /_switchboard/api/backends", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			URL    string
+			Name   string
 			Weight int64
 			Demo   bool
 		}
@@ -188,9 +177,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 				fail(w, 500, err)
 				return
 			}
-			body.URL = d.URL
+			body.URL, body.Name = d.URL, d.Name
 		}
-		if _, err := s.Pool.Add(balancer.BackendConfig{URL: body.URL, Weight: body.Weight}); err != nil {
+		if _, err := s.Pool.Add(balancer.BackendConfig{URL: body.URL, Name: body.Name, Weight: body.Weight}); err != nil {
 			if body.Demo {
 				s.Fleet.Stop(body.URL)
 			}
@@ -198,9 +187,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 			return
 		}
 		writeJSON(w, 201, s.state())
-	}))
+	})
 
-	mux.HandleFunc("PATCH /_switchboard/api/backends/{id}", s.admin(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PATCH /_switchboard/api/backends/{id}", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Weight   *int64
 			Draining *bool
@@ -222,9 +211,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 			return
 		}
 		writeJSON(w, 200, s.state())
-	}))
+	})
 
-	mux.HandleFunc("DELETE /_switchboard/api/backends/{id}", s.admin(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /_switchboard/api/backends/{id}", func(w http.ResponseWriter, r *http.Request) {
 		b, err := s.Pool.Remove(r.PathValue("id"))
 		if err != nil {
 			fail(w, 400, err)
@@ -238,21 +227,21 @@ func (s *Server) Register(mux *http.ServeMux) {
 			}()
 		}
 		writeJSON(w, 200, s.state())
-	}))
+	})
 
 	mux.HandleFunc("GET /_switchboard/api/backends/{id}/chaos", func(w http.ResponseWriter, r *http.Request) {
 		s.chaos(w, r, nil)
 	})
-	mux.HandleFunc("PUT /_switchboard/api/backends/{id}/chaos", s.admin(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /_switchboard/api/backends/{id}/chaos", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 4096))
 		if err != nil {
 			fail(w, 400, err)
 			return
 		}
 		s.chaos(w, r, body)
-	}))
+	})
 
-	mux.HandleFunc("PUT /_switchboard/api/loadgen", s.admin(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /_switchboard/api/loadgen", func(w http.ResponseWriter, r *http.Request) {
 		if s.Loadgen == nil {
 			fail(w, 400, errors.New("traffic generator is only available with -demo"))
 			return
@@ -264,9 +253,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 		}
 		s.Loadgen.SetRPS(body.RPS)
 		writeJSON(w, 200, s.state())
-	}))
+	})
 
-	mux.HandleFunc("PUT /_switchboard/api/ratelimit", s.admin(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /_switchboard/api/ratelimit", func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Rate, Burst float64 }
 		if err := decode(r, &body); err != nil {
 			fail(w, 400, err)
@@ -278,7 +267,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 		}
 		s.Pool.SetRateLimit(body.Rate, body.Burst)
 		writeJSON(w, 200, s.state())
-	}))
+	})
 }
 
 var chaosClient = &http.Client{Timeout: 3 * time.Second}
