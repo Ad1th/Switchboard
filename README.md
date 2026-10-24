@@ -2,7 +2,14 @@
 
 A reverse proxy and load balancer in Go, built to understand how this stuff works instead of using NGINX blindly. Standard library only.
 
-client → switchboard → backend(s)
+```mermaid
+flowchart LR
+    clients["Clients"] --> sb["Switchboard :8080<br/>rate limit, strategy,<br/>breakers, retries"]
+    sb --> b1["api-1 :9001"] & b2["api-2 :9002"] & b3["api-3 :9003"] & b4["api-4 :9004"]
+    sb -.->|"live status"| page["/_switchboard/"]
+```
+
+More diagrams (request lifecycle, circuit breaker states, strategies, consistent hashing, rate limiting, runtime changes, the live status page, fault injection, the shop cart) are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Try it
 
